@@ -6,7 +6,7 @@ type LogRecord struct {
 }
 
 type LogRecordPos struct {
-	Fid    uint32 // 文件fid
-	Size   uint32 // logrecord大小
-	Offset int64  // 在文件中的offset
+	FileID uint32
+	Size   uint32
+	Offset int64
 }

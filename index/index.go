@@ -17,7 +17,7 @@ type Indexer interface {
 type IndexerType byte
 
 const (
-	Btree IndexerType = iota + 1
+	Btree IndexerType = iota
 )
 
 func NewIndexer(typ IndexerType) Indexer {
