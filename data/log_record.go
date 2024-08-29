@@ -1,8 +1,16 @@
 package data
 
+type LogRecordType byte
+
+const (
+	LogRecordNormal LogRecordType = iota
+	LogRecodDeleted
+)
+
 type LogRecord struct {
 	Key   []byte
 	Value []byte
+	Type  LogRecordType
 }
 
 type LogRecordPos struct {
