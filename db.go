@@ -2,6 +2,7 @@ package bitcask
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -68,6 +69,10 @@ func Open(opts ...DBOption) (*DB, error) {
 	db.isInitial = isInitial
 
 	if err := db.loadDataFiles(); err != nil {
+		return nil, err
+	}
+
+	if err := db.loadIndexFromDataFiles(); err != nil {
 		return nil, err
 	}
 
@@ -155,6 +160,56 @@ func (db *DB) loadDataFiles() error {
 		}
 	}
 
+	return nil
+}
+
+func (db *DB) loadIndexFromDataFiles() error {
+	for i, fileID := range db.fileIDs {
+		fileID := uint32(fileID)
+
+		var dataFile *data.DataFile
+		if fileID == db.activeFile.FileID {
+			dataFile = db.activeFile
+		} else {
+			dataFile = db.oldFiles[fileID]
+		}
+
+		offset := int64(0)
+		for {
+			logRecord, size, err := dataFile.ReadLogRecord(offset)
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				return err
+			}
+
+			logRecordPos := &data.LogRecordPos{FileID: fileID, Offset: offset, Size: uint32(size)}
+
+			var oldPos *data.LogRecordPos
+			var ok bool
+			if logRecord.Type == data.LogRecodDeleted {
+				oldPos, ok = db.indexer.Delete(logRecord.Key)
+				if !ok {
+					panic("indexer delete fail")
+				}
+			} else if logRecord.Type == data.LogRecordNormal {
+				oldPos = db.indexer.Put(logRecord.Key, logRecordPos)
+			} else {
+				panic("unknow log record type")
+			}
+
+			if oldPos != nil {
+				db.reclaimSize += int64(oldPos.Size)
+			}
+
+			offset += size
+		}
+
+		if i == len(db.fileIDs)-1 {
+			db.activeFile.WriteOffset = offset
+		}
+	}
 	return nil
 }
 
@@ -257,7 +312,7 @@ func (db *DB) getValueByIndexInfo(info *data.LogRecordPos) ([]byte, error) {
 		return nil, ErrDataFileNotFound
 	}
 
-	logRecord, err := dataFile.ReadLogRecord(info.Offset)
+	logRecord, _, err := dataFile.ReadLogRecord(info.Offset)
 	if err != nil {
 		return nil, err
 	}

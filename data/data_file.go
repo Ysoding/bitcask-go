@@ -21,8 +21,8 @@ func OpenDataFile(dbPath string, fileID uint32, ioType fio.IOType) (*DataFile, e
 	return newDataFile(GetDataFileName(dbPath, fileID), fileID, ioType)
 }
 
-func (d *DataFile) ReadLogRecord(offset int64) (*LogRecord, error) {
-	return nil, nil
+func (d *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
+	return nil, 0, nil
 }
 
 func GetDataFileName(dbPath string, fileID uint32) string {
