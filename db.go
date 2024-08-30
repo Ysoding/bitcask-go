@@ -2,39 +2,124 @@ package bitcask
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 
+	"github.com/gofrs/flock"
 	"github.com/ysoding/bitcask/data"
 	"github.com/ysoding/bitcask/fio"
 	"github.com/ysoding/bitcask/index"
 )
 
+const (
+	fileLockName = "flock"
+)
+
 type DB struct {
 	option
 	indexer     index.Indexer
-	mu          sync.RWMutex
+	mu          *sync.RWMutex
 	activeFile  *data.DataFile            // 当前活跃文件，可以写入
 	oldFiles    map[uint32]*data.DataFile // 旧的文件，只用于读 fileid->datafile
 	reclaimSize int64                     // 表示有多少数据是无效的
 	bytesWrite  uint64                    //总计写的节字数
+	isInitial   bool                      // 是否是第一次初始化此数据目录
+	fileLock    *flock.Flock
 }
 
 func Open(opts ...DBOption) (*DB, error) {
-
 	db := &DB{
-		option: DefaultOption,
+		option:   DefaultOption,
+		oldFiles: make(map[uint32]*data.DataFile),
+		mu:       new(sync.RWMutex),
 	}
 
 	for _, opt := range opts {
 		opt(&db.option)
 	}
 
-	err := db.checkConfiguration()
+	if err := db.checkConfiguration(); err != nil {
+		return nil, err
+	}
+
+	isInitial, err := db.initDirectory()
 	if err != nil {
 		return nil, err
 	}
 
+	if err := db.checkDatabaseIsUsing(); err != nil {
+		return nil, err
+	}
+
+	hasData, err := db.checkDatabaseHasData()
+	if err != nil {
+		return nil, err
+	}
+
+	if !hasData {
+		isInitial = true
+	}
+
+	db.isInitial = isInitial
+
+	if err := db.loadDataFiles(); err != nil {
+		return nil, err
+	}
+
 	return db, nil
+}
+
+func (db *DB) initDirectory() (bool, error) {
+	if _, err := os.Stat(db.dirPath); os.IsNotExist(err) {
+		if err := os.Mkdir(db.dirPath, os.ModePerm); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// 判断基于dirPath目录是否被使用
+func (db *DB) checkDatabaseIsUsing() error {
+	fileLock := flock.New(filepath.Join(db.dirPath, fileLockName))
+	locked, err := fileLock.TryLock()
+	if err != nil {
+		return err
+	}
+
+	if !locked {
+		return ErrDatabaseIsUsing
+	}
+
+	db.fileLock = fileLock
+
+	return nil
+}
+
+// 检测dirPath目录是否有.data文件
+func (db *DB) checkDatabaseHasData() (bool, error) {
+	entries, err := os.ReadDir(db.dirPath)
+	if err != nil {
+		return false, err
+	}
+
+	hasData := false
+
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), data.DataFileNameSuffix) {
+			hasData = true
+			break
+		}
+	}
+
+	return hasData, nil
+}
+
+func (db *DB) loadDataFiles() error {
+	return nil
 }
 
 func (db *DB) Close() error {
@@ -154,6 +239,7 @@ func (db *DB) appendLogRecordWithLock(logRecord *data.LogRecord) (*data.LogRecor
 	return db.appendLogRecord(logRecord)
 }
 
+// 向activeFile追加写入数据
 func (db *DB) appendLogRecord(logRecord *data.LogRecord) (*data.LogRecordPos, error) {
 	if db.activeFile == nil {
 		if err := db.updateActiveDataFile(); err != nil {
