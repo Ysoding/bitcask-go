@@ -4,6 +4,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -27,6 +29,7 @@ type DB struct {
 	bytesWrite  uint64                    //总计写的节字数
 	isInitial   bool                      // 是否是第一次初始化此数据目录
 	fileLock    *flock.Flock
+	fileIDs     []int
 }
 
 func Open(opts ...DBOption) (*DB, error) {
@@ -119,6 +122,39 @@ func (db *DB) checkDatabaseHasData() (bool, error) {
 }
 
 func (db *DB) loadDataFiles() error {
+	entries, err := os.ReadDir(db.dirPath)
+	if err != nil {
+		return err
+	}
+
+	var fileIDs []int
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), data.DataFileNameSuffix) {
+			tmps := strings.Split(entry.Name(), ".")
+			fileID, err := strconv.Atoi(tmps[0])
+			if err != nil {
+				return ErrDataDirectoryCorrupted
+			}
+			fileIDs = append(fileIDs, fileID)
+		}
+	}
+
+	sort.Ints(fileIDs)
+	db.fileIDs = fileIDs
+
+	for i, fileID := range fileIDs {
+		dataFile, err := data.OpenDataFile(db.dirPath, uint32(fileID), fio.StandardFileIO)
+		if err != nil {
+			return err
+		}
+
+		if i == len(fileIDs)-1 {
+			db.activeFile = dataFile
+		} else {
+			db.oldFiles[uint32(fileID)] = dataFile
+		}
+	}
+
 	return nil
 }
 
