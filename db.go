@@ -81,10 +81,29 @@ func (db *DB) Put(key []byte, val []byte) error {
 	return nil
 }
 
-// Delete 返回旧的值
+// Delete
 func (db *DB) Delete(key []byte) error {
 	if len(key) == 0 {
 		return ErrKeyIsEmpty
+	}
+
+	if info := db.indexer.Get(key); info == nil {
+		return nil
+	}
+
+	logRecord := &data.LogRecord{Key: key, Type: data.LogRecodDeleted}
+	info, err := db.appendLogRecordWithLock(logRecord)
+	if err != nil {
+		return err
+	}
+	db.reclaimSize += int64(info.Size)
+
+	oldInfo, ok := db.indexer.Delete(key)
+	if !ok {
+		return ErrIndexUpdateFailed
+	}
+	if oldInfo != nil {
+		db.reclaimSize += int64(oldInfo.Size)
 	}
 
 	return nil
