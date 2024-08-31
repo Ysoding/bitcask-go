@@ -3,6 +3,7 @@ package bitcask
 import "os"
 
 type DBOption func(opt *option)
+type IteratorOption func(opt *iteratorOption)
 
 type option struct {
 	indexerType  IndexerType
@@ -10,6 +11,13 @@ type option struct {
 	syncWrite    bool   // 每次写是否持久化
 	bytesPerSync uint32
 	dataFileSize int64 // 存储文件大小
+}
+
+type iteratorOption struct {
+	// 遍历前缀为指定值的 Key，默认为空
+	Prefix []byte
+	// 是否反向遍历，默认 false 是正向
+	Reverse bool
 }
 
 type IndexerType = byte
@@ -23,6 +31,23 @@ var DefaultOption = option{
 	dirPath:      os.TempDir(),
 	dataFileSize: 256 * 1024 * 1024, // 256MB
 	syncWrite:    false,
+}
+
+var DefaultIteratorOption = iteratorOption{
+	Prefix:  nil,
+	Reverse: false,
+}
+
+func WithIteratorPrefix(val []byte) IteratorOption {
+	return func(opt *iteratorOption) {
+		opt.Prefix = val
+	}
+}
+
+func WithIteratorReverse(val bool) IteratorOption {
+	return func(opt *iteratorOption) {
+		opt.Reverse = val
+	}
 }
 
 func WithIndexerType(val IndexerType) DBOption {

@@ -2,6 +2,7 @@ package bitcask
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -47,6 +48,8 @@ func Open(opts ...DBOption) (*DB, error) {
 	if err := db.checkConfiguration(); err != nil {
 		return nil, err
 	}
+
+	db.indexer = index.NewIndexer(index.IndexerType(db.indexerType))
 
 	isInitial, err := db.initDirectory()
 	if err != nil {
@@ -188,7 +191,7 @@ func (db *DB) loadIndexFromDataFiles() error {
 
 			var oldPos *data.LogRecordPos
 			var ok bool
-			if logRecord.Type == data.LogRecodDeleted {
+			if logRecord.Type == data.LogRecordDeleted {
 				oldPos, ok = db.indexer.Delete(logRecord.Key)
 				if !ok {
 					panic("indexer delete fail")
@@ -214,7 +217,45 @@ func (db *DB) loadIndexFromDataFiles() error {
 }
 
 func (db *DB) Close() error {
+	defer func() {
+		// 释放文件锁
+		if err := db.fileLock.Unlock(); err != nil {
+			panic(fmt.Sprintf("failed to unlock the directory, %v", err))
+		}
+
+		// 关闭索引
+		if err := db.indexer.Close(); err != nil {
+			panic("failed to close index")
+		}
+	}()
+
+	if db.activeFile == nil {
+		return nil
+	}
+
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	if err := db.activeFile.Close(); err != nil {
+		return err
+	}
+
+	for _, file := range db.oldFiles {
+		if err := file.Close(); err != nil {
+			return err
+		}
+	}
+
 	return nil
+}
+
+func (db *DB) Sync() error {
+	if db.activeFile == nil {
+		return nil
+	}
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	return db.activeFile.Sync()
 }
 
 func (db *DB) Get(key []byte) ([]byte, error) {
@@ -233,7 +274,6 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 	return db.getValueByIndexInfo(info)
 }
 
-// Put
 func (db *DB) Put(key []byte, val []byte) error {
 	if len(key) == 0 {
 		return ErrKeyIsEmpty
@@ -257,7 +297,6 @@ func (db *DB) Put(key []byte, val []byte) error {
 	return nil
 }
 
-// Delete
 func (db *DB) Delete(key []byte) error {
 	if len(key) == 0 {
 		return ErrKeyIsEmpty
@@ -267,7 +306,7 @@ func (db *DB) Delete(key []byte) error {
 		return nil
 	}
 
-	logRecord := &data.LogRecord{Key: key, Type: data.LogRecodDeleted}
+	logRecord := &data.LogRecord{Key: key, Type: data.LogRecordDeleted}
 	info, err := db.appendLogRecordWithLock(logRecord)
 	if err != nil {
 		return err
@@ -286,7 +325,37 @@ func (db *DB) Delete(key []byte) error {
 }
 
 func (db *DB) ListKeys() ([][]byte, error) {
-	return nil, nil
+	iterator := db.indexer.Iterator(false)
+	defer iterator.Close()
+	keys := make([][]byte, db.indexer.Size())
+
+	idx := 0
+	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
+		keys[idx] = iterator.Key()
+		idx++
+	}
+
+	return keys, nil
+}
+
+// Fold 获取所有的数据，并执行用户指定的操作，函数返回 false 时终止遍历
+func (db *DB) Fold(fn func(key []byte, value []byte) bool) error {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	iterator := db.indexer.Iterator(false)
+	defer iterator.Close()
+
+	for iterator.Rewind(); iterator.Valid(); iterator.Next() {
+		value, err := db.getValueByIndexInfo(iterator.Value())
+		if err != nil {
+			return err
+		}
+		if !fn(iterator.Key(), value) {
+			break
+		}
+	}
+	return nil
 }
 
 func (db *DB) checkConfiguration() error {
@@ -317,7 +386,7 @@ func (db *DB) getValueByIndexInfo(info *data.LogRecordPos) ([]byte, error) {
 		return nil, err
 	}
 
-	if logRecord.Type == data.LogRecodDeleted {
+	if logRecord.Type == data.LogRecordDeleted {
 		return nil, ErrKeyNotFound
 	}
 
@@ -353,7 +422,7 @@ func (db *DB) appendLogRecord(logRecord *data.LogRecord) (*data.LogRecordPos, er
 	}
 
 	offset := db.activeFile.WriteOffset
-	if _, err := db.activeFile.Write(encodedRecord); err != nil {
+	if err := db.activeFile.Write(encodedRecord); err != nil {
 		return nil, err
 	}
 	db.bytesWrite += uint64(size)
