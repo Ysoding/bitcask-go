@@ -361,3 +361,25 @@ func TestDB_FileLock(t *testing.T) {
 	err = db2.Close()
 	assert.Nil(t, err)
 }
+
+func TestDB_Backup(t *testing.T) {
+	dir, _ := os.MkdirTemp("", "bitcask-go-backup")
+	db, err := Open(WithDBDirPath(dir))
+	defer removeDB(db)
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+
+	for i := 1; i < 1000000; i++ {
+		err := db.Put(getTestKey(i), randomValue(128))
+		assert.Nil(t, err)
+	}
+
+	backupDir, _ := os.MkdirTemp("", "bitcask-go-backup-test")
+	err = db.Backup(backupDir)
+	assert.Nil(t, err)
+
+	db2, err := Open(WithDBDirPath(backupDir))
+	defer removeDB(db2)
+	assert.Nil(t, err)
+	assert.NotNil(t, db2)
+}

@@ -11,7 +11,10 @@ import (
 )
 
 const (
-	DataFileNameSuffix = ".data"
+	DataFileNameSuffix    = ".data"
+	HintFileName          = "hint-index"
+	MergeFinishedFileName = "merge-finished"
+	SeqNoFileName         = "seq-no"
 )
 
 var (
@@ -26,6 +29,12 @@ type DataFile struct {
 
 func OpenDataFile(dbPath string, fileID uint32, ioType fio.IOType) (*DataFile, error) {
 	return newDataFile(GetDataFileName(dbPath, fileID), fileID, ioType)
+}
+
+// OpenSeqNoFile 存储事务序列号的文件
+func OpenSeqNoFile(dirPath string) (*DataFile, error) {
+	fileName := filepath.Join(dirPath, SeqNoFileName)
+	return newDataFile(fileName, 0, fio.StandardFileIO)
 }
 
 func newDataFile(fileName string, fileID uint32, ioType fio.IOType) (*DataFile, error) {

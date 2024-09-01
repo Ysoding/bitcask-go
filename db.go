@@ -15,9 +15,11 @@ import (
 	"github.com/ysoding/bitcask/data"
 	"github.com/ysoding/bitcask/fio"
 	"github.com/ysoding/bitcask/index"
+	"github.com/ysoding/bitcask/utils"
 )
 
 const (
+	seqNoKey     = "seq.no"
 	fileLockName = "flock"
 )
 
@@ -264,16 +266,42 @@ func (db *DB) Close() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
+	// 保存当前事务序列号
+	if err := db.saveCurrentSeqNo(); err != nil {
+		return err
+	}
+
+	//	关闭当前活跃文件g
 	if err := db.activeFile.Close(); err != nil {
 		return err
 	}
 
+	// 关闭旧的数据文件
 	for _, file := range db.oldFiles {
 		if err := file.Close(); err != nil {
 			return err
 		}
 	}
 
+	return nil
+}
+
+func (db *DB) saveCurrentSeqNo() error {
+	seqNoFile, err := data.OpenSeqNoFile(db.dirPath)
+	if err != nil {
+		return err
+	}
+	record := &data.LogRecord{
+		Key:   []byte(seqNoKey),
+		Value: []byte(strconv.FormatUint(db.seqNo, 10)),
+	}
+	encBuf, _ := data.EncodeLogRecord(record)
+	if err := seqNoFile.Write(encBuf); err != nil {
+		return err
+	}
+	if err := seqNoFile.Sync(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -284,6 +312,13 @@ func (db *DB) Sync() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	return db.activeFile.Sync()
+}
+
+// Backup 备份数据库，将数据文件拷贝到新的目录中
+func (db *DB) Backup(dir string) error {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	return utils.CopyDir(db.dirPath, dir, []string{fileLockName})
 }
 
 func (db *DB) Get(key []byte) ([]byte, error) {
