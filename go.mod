@@ -5,6 +5,7 @@ go 1.22.3
 require (
 	github.com/gofrs/flock v0.12.1
 	github.com/google/btree v1.1.3
+	github.com/plar/go-adaptive-radix-tree v1.0.5
 	github.com/stretchr/testify v1.9.0
 )
 

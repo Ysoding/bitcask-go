@@ -20,12 +20,16 @@ type IndexerType byte
 
 const (
 	Btree IndexerType = iota
+	// ART 自适应基数树索引
+	ART
 )
 
 func NewIndexer(typ IndexerType) Indexer {
 	switch typ {
 	case Btree:
 		return NewBTree()
+	case ART:
+		return NewART()
 	default:
 		panic("unsupported indexer type")
 	}
