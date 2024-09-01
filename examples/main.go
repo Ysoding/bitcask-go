@@ -4,7 +4,7 @@ import "github.com/ysoding/bitcask"
 
 func main() {
 
-	db, err := bitcask.Open(bitcask.WithIndexerType(bitcask.BTree))
+	db, err := bitcask.Open(bitcask.WithDBIndexerType(bitcask.BTree))
 	if err != nil {
 		panic(err)
 	}

@@ -10,6 +10,7 @@ type LogRecordType byte
 const (
 	LogRecordNormal LogRecordType = iota
 	LogRecordDeleted
+	LogRecordTxnFinished
 )
 
 // crc 	type 	keySize valueSize
@@ -26,6 +27,12 @@ type LogRecordPos struct {
 	FileID uint32
 	Size   uint32
 	Offset int64
+}
+
+// TransactionRecord 暂存的事务相关的数据
+type TransactionRecord struct {
+	Record *LogRecord
+	Pos    *LogRecordPos
 }
 
 type logRecordHeader struct {

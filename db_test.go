@@ -47,7 +47,7 @@ func randomValue(n int) []byte {
 
 func TestOpen(t *testing.T) {
 	dir, _ := os.MkdirTemp("", "bitcask-go")
-	db, err := Open(WithDirPath(dir))
+	db, err := Open(WithDBDirPath(dir))
 	defer removeDB(db)
 	assert.Nil(t, err)
 	assert.NotNil(t, db)
@@ -56,7 +56,7 @@ func TestOpen(t *testing.T) {
 func TestDB_Put(t *testing.T) {
 	dir, _ := os.MkdirTemp("", "bitcask-go-put")
 
-	opts := []DBOption{WithDirPath(dir), WithDataFileSize(64 * 1024 * 1024)}
+	opts := []DBOption{WithDBDirPath(dir), WithDBDataFileSize(64 * 1024 * 1024)}
 
 	db, err := Open(opts...)
 	defer removeDB(db)
@@ -122,7 +122,7 @@ func TestDB_Put(t *testing.T) {
 
 func TestDB_Get(t *testing.T) {
 	dir, _ := os.MkdirTemp("", "bitcask-go-get")
-	opts := []DBOption{WithDirPath(dir), WithDataFileSize(64 * 1024 * 1024)}
+	opts := []DBOption{WithDBDirPath(dir), WithDBDataFileSize(64 * 1024 * 1024)}
 
 	db, err := Open(opts...)
 	defer removeDB(db)
@@ -201,7 +201,7 @@ func TestDB_Get(t *testing.T) {
 
 func TestDB_Delete(t *testing.T) {
 	dir, _ := os.MkdirTemp("", "bitcask-go-delete")
-	opts := []DBOption{WithDirPath(dir), WithDataFileSize(64 * 1024 * 1024)}
+	opts := []DBOption{WithDBDirPath(dir), WithDBDataFileSize(64 * 1024 * 1024)}
 
 	db, err := Open(opts...)
 	defer removeDB(db)

@@ -23,7 +23,7 @@ func (db *DB) NewIterator(opts ...IteratorOption) *Iterator {
 		opt(&iter.iteratorOption)
 	}
 
-	indexerIter := db.indexer.Iterator(iter.Reverse)
+	indexerIter := db.indexer.Iterator(iter.reverse)
 	iter.indexerIter = indexerIter
 
 	return iter
@@ -71,7 +71,7 @@ func (it *Iterator) Close() {
 }
 
 func (it *Iterator) skipToNext() {
-	prefixLen := len(it.Prefix)
+	prefixLen := len(it.prefix)
 	if prefixLen == 0 {
 		return
 	}
@@ -79,7 +79,7 @@ func (it *Iterator) skipToNext() {
 	for ; it.indexerIter.Valid(); it.indexerIter.Next() {
 		key := it.indexerIter.Key()
 
-		if prefixLen <= len(key) && bytes.Compare(it.Prefix, key[:prefixLen]) == 0 {
+		if prefixLen <= len(key) && bytes.Compare(it.prefix, key[:prefixLen]) == 0 {
 			break
 		}
 	}

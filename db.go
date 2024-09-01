@@ -32,6 +32,7 @@ type DB struct {
 	isInitial   bool                      // 是否是第一次初始化此数据目录
 	fileLock    *flock.Flock
 	fileIDs     []int
+	seqNo       uint64 // 事务序列号，全局递增
 }
 
 func Open(opts ...DBOption) (*DB, error) {
@@ -167,6 +168,24 @@ func (db *DB) loadDataFiles() error {
 }
 
 func (db *DB) loadIndexFromDataFiles() error {
+
+	updateIndex := func(key []byte, typ data.LogRecordType, pos *data.LogRecordPos) {
+		var oldPos *data.LogRecordPos
+		if typ == data.LogRecordDeleted {
+			oldPos, _ = db.indexer.Delete(key)
+			db.reclaimSize += int64(pos.Size)
+		} else {
+			oldPos = db.indexer.Put(key, pos)
+		}
+		if oldPos != nil {
+			db.reclaimSize += int64(oldPos.Size)
+		}
+	}
+
+	// 暂存事务数据
+	transactionRecords := make(map[uint64][]*data.TransactionRecord)
+	currentSeqNo := nonTransactionSeqNo
+
 	for i, fileID := range db.fileIDs {
 		fileID := uint32(fileID)
 
@@ -189,21 +208,27 @@ func (db *DB) loadIndexFromDataFiles() error {
 
 			logRecordPos := &data.LogRecordPos{FileID: fileID, Offset: offset, Size: uint32(size)}
 
-			var oldPos *data.LogRecordPos
-			var ok bool
-			if logRecord.Type == data.LogRecordDeleted {
-				oldPos, ok = db.indexer.Delete(logRecord.Key)
-				if !ok {
-					panic("indexer delete fail")
-				}
-			} else if logRecord.Type == data.LogRecordNormal {
-				oldPos = db.indexer.Put(logRecord.Key, logRecordPos)
+			realKey, seqNo := parseLogRecordKey(logRecord.Key)
+			if seqNo == nonTransactionSeqNo {
+				updateIndex(realKey, logRecord.Type, logRecordPos)
 			} else {
-				panic("unknow log record type")
+				if logRecord.Type == data.LogRecordTxnFinished {
+					// 事务完成，对应的 seq no 的数据可以更新到内存索引中
+					for _, txnRecord := range transactionRecords[seqNo] {
+						updateIndex(txnRecord.Record.Key, txnRecord.Record.Type, txnRecord.Pos)
+					}
+					delete(transactionRecords, seqNo)
+				} else {
+					logRecord.Key = realKey
+					transactionRecords[seqNo] = append(transactionRecords[seqNo], &data.TransactionRecord{
+						Record: logRecord,
+						Pos:    logRecordPos,
+					})
+				}
 			}
-
-			if oldPos != nil {
-				db.reclaimSize += int64(oldPos.Size)
+			// 更新事务序列号
+			if seqNo > currentSeqNo {
+				currentSeqNo = seqNo
 			}
 
 			offset += size
@@ -213,6 +238,8 @@ func (db *DB) loadIndexFromDataFiles() error {
 			db.activeFile.WriteOffset = offset
 		}
 	}
+
+	db.seqNo = currentSeqNo
 	return nil
 }
 
@@ -280,7 +307,7 @@ func (db *DB) Put(key []byte, val []byte) error {
 	}
 
 	logRecord := &data.LogRecord{
-		Key:   key,
+		Key:   logRecordKeyWithSeqNo(key, nonTransactionSeqNo),
 		Value: val,
 		Type:  data.LogRecordNormal,
 	}
@@ -306,7 +333,7 @@ func (db *DB) Delete(key []byte) error {
 		return nil
 	}
 
-	logRecord := &data.LogRecord{Key: key, Type: data.LogRecordDeleted}
+	logRecord := &data.LogRecord{Key: logRecordKeyWithSeqNo(key, nonTransactionSeqNo), Type: data.LogRecordDeleted}
 	info, err := db.appendLogRecordWithLock(logRecord)
 	if err != nil {
 		return err

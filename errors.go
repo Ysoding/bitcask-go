@@ -9,4 +9,5 @@ var (
 	ErrIndexUpdateFailed      = errors.New("failed to update index")
 	ErrDatabaseIsUsing        = errors.New("database directory is used by another process")
 	ErrDataDirectoryCorrupted = errors.New("database directory maybe corrupted")
+	ErrExceedMaxBatchNum      = errors.New("exceed the max batch num")
 )

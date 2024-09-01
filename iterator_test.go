@@ -9,7 +9,7 @@ import (
 
 func TestDB_NewIterator(t *testing.T) {
 	dir, _ := os.MkdirTemp("", "bitcask-go-iterator-1")
-	opts := []DBOption{WithDirPath(dir), WithDataFileSize(64 * 1024 * 1024)}
+	opts := []DBOption{WithDBDirPath(dir), WithDBDataFileSize(64 * 1024 * 1024)}
 
 	db, err := Open(opts...)
 	defer removeDB(db)
@@ -24,7 +24,7 @@ func TestDB_NewIterator(t *testing.T) {
 
 func TestDB_Iterator_One_Value(t *testing.T) {
 	dir, _ := os.MkdirTemp("", "bitcask-go-iterator-2")
-	opts := []DBOption{WithDirPath(dir), WithDataFileSize(64 * 1024 * 1024)}
+	opts := []DBOption{WithDBDirPath(dir), WithDBDataFileSize(64 * 1024 * 1024)}
 
 	db, err := Open(opts...)
 	defer removeDB(db)
@@ -46,7 +46,7 @@ func TestDB_Iterator_One_Value(t *testing.T) {
 
 func TestDB_Iterator_Multi_Values(t *testing.T) {
 	dir, _ := os.MkdirTemp("", "bitcask-go-iterator-3")
-	opts := []DBOption{WithDirPath(dir), WithDataFileSize(64 * 1024 * 1024)}
+	opts := []DBOption{WithDBDirPath(dir), WithDBDataFileSize(64 * 1024 * 1024)}
 
 	db, err := Open(opts...)
 	defer removeDB(db)
