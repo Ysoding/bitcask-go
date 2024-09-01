@@ -33,6 +33,7 @@ type DB struct {
 	fileLock    *flock.Flock
 	fileIDs     []int
 	seqNo       uint64 // 事务序列号，全局递增
+	isMerging   bool
 }
 
 func Open(opts ...DBOption) (*DB, error) {

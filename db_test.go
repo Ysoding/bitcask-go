@@ -255,3 +255,109 @@ func TestDB_Delete(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, val1, val2)
 }
+
+func TestDB_ListKeys(t *testing.T) {
+	dir, _ := os.MkdirTemp("", "bitcask-go-list-keys")
+	db, err := Open(WithDBDirPath(dir))
+	defer removeDB(db)
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+
+	// 数据库为空
+	keys1, err := db.ListKeys()
+	assert.Nil(t, err)
+	assert.Equal(t, 0, len(keys1))
+
+	// 只有一条数据
+	err = db.Put(getTestKey(11), randomValue(20))
+	assert.Nil(t, err)
+
+	keys2, err := db.ListKeys()
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(keys2))
+
+	// 有多条数据
+	err = db.Put(getTestKey(22), randomValue(20))
+	assert.Nil(t, err)
+	err = db.Put(getTestKey(33), randomValue(20))
+	assert.Nil(t, err)
+	err = db.Put(getTestKey(44), randomValue(20))
+	assert.Nil(t, err)
+
+	keys3, err := db.ListKeys()
+	assert.Nil(t, err)
+	assert.Equal(t, 4, len(keys3))
+
+	for _, k := range keys3 {
+		assert.NotNil(t, k)
+	}
+}
+
+func TestDB_Fold(t *testing.T) {
+	dir, _ := os.MkdirTemp("", "bitcask-go-fold")
+	db, err := Open(WithDBDirPath(dir))
+	defer removeDB(db)
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+
+	err = db.Put(getTestKey(11), randomValue(20))
+	assert.Nil(t, err)
+	err = db.Put(getTestKey(22), randomValue(20))
+	assert.Nil(t, err)
+	err = db.Put(getTestKey(33), randomValue(20))
+	assert.Nil(t, err)
+	err = db.Put(getTestKey(44), randomValue(20))
+	assert.Nil(t, err)
+
+	err = db.Fold(func(key []byte, value []byte) bool {
+		assert.NotNil(t, key)
+		assert.NotNil(t, value)
+		return true
+	})
+	assert.Nil(t, err)
+}
+
+func TestDB_Close(t *testing.T) {
+	dir, _ := os.MkdirTemp("", "bitcask-go-close")
+	db, err := Open(WithDBDirPath(dir))
+	defer removeDB(db)
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+
+	err = db.Put(getTestKey(11), randomValue(20))
+	assert.Nil(t, err)
+}
+
+func TestDB_Sync(t *testing.T) {
+	dir, _ := os.MkdirTemp("", "bitcask-go-sync")
+	db, err := Open(WithDBDirPath(dir))
+	defer removeDB(db)
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+
+	err = db.Put(getTestKey(11), randomValue(20))
+	assert.Nil(t, err)
+
+	err = db.Sync()
+	assert.Nil(t, err)
+}
+
+func TestDB_FileLock(t *testing.T) {
+	dir, _ := os.MkdirTemp("", "bitcask-go-filelock")
+	db, err := Open(WithDBDirPath(dir))
+	defer removeDB(db)
+	assert.Nil(t, err)
+	assert.NotNil(t, db)
+
+	_, err = Open(WithDBDirPath(dir))
+	assert.Equal(t, ErrDatabaseIsUsing, err)
+
+	err = db.Close()
+	assert.Nil(t, err)
+
+	db2, err := Open(WithDBDirPath(dir))
+	assert.Nil(t, err)
+	assert.NotNil(t, db2)
+	err = db2.Close()
+	assert.Nil(t, err)
+}
