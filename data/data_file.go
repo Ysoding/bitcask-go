@@ -24,7 +24,7 @@ var (
 type DataFile struct {
 	FileID      uint32
 	WriteOffset int64
-	ioManager   fio.IOManager
+	IoManager   fio.IOManager
 }
 
 func OpenDataFile(dbPath string, fileID uint32, ioType fio.IOType) (*DataFile, error) {
@@ -58,13 +58,13 @@ func newDataFile(fileName string, fileID uint32, ioType fio.IOType) (*DataFile, 
 	return &DataFile{
 		FileID:      fileID,
 		WriteOffset: 0,
-		ioManager:   ioManager,
+		IoManager:   ioManager,
 	}, nil
 }
 
 // ReadLogRecord 从数据文件中读取offset的LogRecord
 func (d *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
-	fileSize, err := d.ioManager.Size()
+	fileSize, err := d.IoManager.Size()
 	if err != nil {
 		return nil, 0, err
 	}
@@ -116,16 +116,16 @@ func (d *DataFile) ReadLogRecord(offset int64) (*LogRecord, int64, error) {
 
 func (d *DataFile) readNBytes(n int64, offset int64) ([]byte, error) {
 	buf := make([]byte, n)
-	_, err := d.ioManager.ReadAt(buf, offset)
+	_, err := d.IoManager.ReadAt(buf, offset)
 	return buf, err
 }
 
 func (d *DataFile) Sync() error {
-	return d.ioManager.Sync()
+	return d.IoManager.Sync()
 }
 
 func (d *DataFile) Close() error {
-	return d.ioManager.Close()
+	return d.IoManager.Close()
 }
 
 func GetDataFileName(dbPath string, fileID uint32) string {
@@ -133,7 +133,7 @@ func GetDataFileName(dbPath string, fileID uint32) string {
 }
 
 func (d *DataFile) Write(buf []byte) error {
-	n, err := d.ioManager.Write(buf)
+	n, err := d.IoManager.Write(buf)
 	if err != nil {
 		return err
 	}

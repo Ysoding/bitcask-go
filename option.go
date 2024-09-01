@@ -30,6 +30,12 @@ type IndexerType = byte
 
 const (
 	BTree IndexerType = iota
+
+	// ART Adpative Radix Tree 自适应基数树索引
+	ART
+
+	// BPlusTree B+ 树索引，将索引存储到磁盘上
+	BPlusTree
 )
 
 var DefaultOption = option{

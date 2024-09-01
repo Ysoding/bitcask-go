@@ -22,14 +22,17 @@ const (
 	Btree IndexerType = iota
 	// ART 自适应基数树索引
 	ART
+	BPTree
 )
 
-func NewIndexer(typ IndexerType) Indexer {
+func NewIndexer(typ IndexerType, dirPath string, sync bool) Indexer {
 	switch typ {
 	case Btree:
 		return NewBTree()
 	case ART:
 		return NewART()
+	case BPTree:
+		return NewBPlusTree(dirPath, sync)
 	default:
 		panic("unsupported indexer type")
 	}
