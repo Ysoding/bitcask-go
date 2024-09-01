@@ -94,6 +94,13 @@ func Open(opts ...DBOption) (*DB, error) {
 		if err := db.loadIndexFromDataFiles(); err != nil {
 			return nil, err
 		}
+
+		// 重置 IO 类型为标准文件 IO
+		if db.mmapAtStartUp {
+			if err := db.resetIoType(); err != nil {
+				return nil, err
+			}
+		}
 	} else { // BPlusTree
 		// B+树索引不需要从数据文件中加载索引
 		// 取出当前事务序列号
@@ -111,6 +118,24 @@ func Open(opts ...DBOption) (*DB, error) {
 	}
 
 	return db, nil
+}
+
+// 将数据文件的 IO 类型设置为标准文件 IO
+func (db *DB) resetIoType() error {
+	if db.activeFile == nil {
+		return nil
+	}
+
+	if err := db.activeFile.SetIOManager(db.dirPath, fio.StandardFileIO); err != nil {
+		return err
+	}
+
+	for _, dataFile := range db.oldFiles {
+		if err := dataFile.SetIOManager(db.dirPath, fio.StandardFileIO); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (db *DB) loadSeqNo() error {
@@ -306,7 +331,12 @@ func (db *DB) loadDataFiles() error {
 	db.fileIDs = fileIDs
 
 	for i, fileID := range fileIDs {
-		dataFile, err := data.OpenDataFile(db.dirPath, uint32(fileID), fio.StandardFileIO)
+		ioType := fio.StandardFileIO
+		if db.mmapAtStartUp {
+			ioType = fio.MemoryMap
+		}
+
+		dataFile, err := data.OpenDataFile(db.dirPath, uint32(fileID), ioType)
 		if err != nil {
 			return err
 		}

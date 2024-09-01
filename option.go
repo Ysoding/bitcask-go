@@ -7,12 +7,12 @@ type IteratorOption func(opt *iteratorOption)
 type WriteBatchOption func(opt *writeBatchOption)
 
 type option struct {
-	indexerType  IndexerType
-	dirPath      string // 存储目录
-	syncWrite    bool   // 每次写是否持久化
-	bytesPerSync uint32
-	dataFileSize int64 // 存储文件大小
-
+	indexerType        IndexerType
+	dirPath            string // 存储目录
+	syncWrite          bool   // 每次写是否持久化
+	bytesPerSync       uint32
+	dataFileSize       int64   // 存储文件大小
+	mmapAtStartUp      bool    // 启动时是否使用 MMap 加载数据
 	dataFileMergeRatio float32 //	数据文件合并的阈值
 }
 
@@ -39,11 +39,13 @@ const (
 )
 
 var DefaultOption = option{
-	indexerType:  BTree,
-	dirPath:      os.TempDir(),
-	dataFileSize: 256 * 1024 * 1024, // 256MB
-	syncWrite:    false,
-	bytesPerSync: 0,
+	indexerType:        BTree,
+	dirPath:            os.TempDir(),
+	dataFileSize:       256 * 1024 * 1024, // 256MB
+	syncWrite:          false,
+	bytesPerSync:       0,
+	mmapAtStartUp:      true,
+	dataFileMergeRatio: 0.5,
 }
 
 var DefaultIteratorOption = iteratorOption{
@@ -113,5 +115,11 @@ func WithDBBytesPerWrite(val uint32) DBOption {
 func WithDBDataFileMergeRatio(val float32) DBOption {
 	return func(opt *option) {
 		opt.dataFileMergeRatio = val
+	}
+}
+
+func WithDBMmapAtStartUp(val bool) DBOption {
+	return func(opt *option) {
+		opt.mmapAtStartUp = val
 	}
 }

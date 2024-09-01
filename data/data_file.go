@@ -147,3 +147,17 @@ func (d *DataFile) WriteHintRecord(key []byte, pos *LogRecordPos) error {
 	encRecord, _ := EncodeLogRecord(record)
 	return d.Write(encRecord)
 }
+
+func (d *DataFile) SetIOManager(dirPath string, ioType fio.IOType) error {
+	if err := d.IoManager.Close(); err != nil {
+		return err
+	}
+
+	ioManager, err := fio.NewIOManager(ioType, GetDataFileName(dirPath, d.FileID))
+	if err != nil {
+		return err
+	}
+
+	d.IoManager = ioManager
+	return nil
+}
