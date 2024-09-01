@@ -42,6 +42,29 @@ type logRecordHeader struct {
 	valueSize  uint32
 }
 
+func DecodeLogRecordPos(buf []byte) *LogRecordPos {
+	index := 0
+
+	fileID, n := binary.Varint(buf[index:])
+	index += n
+
+	offset, n := binary.Varint(buf[index:])
+	index += n
+
+	size, _ := binary.Varint(buf[index:])
+	return &LogRecordPos{FileID: uint32(fileID), Offset: offset, Size: uint32(size)}
+}
+
+// EncodeLogRecordPos 对位置信息进行编码
+func EncodeLogRecordPos(pos *LogRecordPos) []byte {
+	buf := make([]byte, binary.MaxVarintLen32*2+binary.MaxVarintLen64)
+	var index = 0
+	index += binary.PutVarint(buf[index:], int64(pos.FileID))
+	index += binary.PutVarint(buf[index:], pos.Offset)
+	index += binary.PutVarint(buf[index:], int64(pos.Size))
+	return buf[:index]
+}
+
 // EncodeLogRecord 对 LogRecord 进行编码，返回字节数组及长度
 //
 //	+-------------+-------------+-------------+--------------+-------------+--------------+

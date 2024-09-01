@@ -37,6 +37,18 @@ func OpenSeqNoFile(dirPath string) (*DataFile, error) {
 	return newDataFile(fileName, 0, fio.StandardFileIO)
 }
 
+// OpenHintFile 打开 Hint 索引文件
+func OpenHintFile(dirPath string) (*DataFile, error) {
+	fileName := filepath.Join(dirPath, HintFileName)
+	return newDataFile(fileName, 0, fio.StandardFileIO)
+}
+
+// OpenMergeFinishedFile 打开标识 merge 完成的文件
+func OpenMergeFinishedFile(dirPath string) (*DataFile, error) {
+	fileName := filepath.Join(dirPath, MergeFinishedFileName)
+	return newDataFile(fileName, 0, fio.StandardFileIO)
+}
+
 func newDataFile(fileName string, fileID uint32, ioType fio.IOType) (*DataFile, error) {
 	ioManager, err := fio.NewIOManager(ioType, fileName)
 	if err != nil {
@@ -127,4 +139,11 @@ func (d *DataFile) Write(buf []byte) error {
 	}
 	d.WriteOffset += int64(n)
 	return nil
+}
+
+// WriteHintRecord 写入索引信息到 hint 文件中
+func (d *DataFile) WriteHintRecord(key []byte, pos *LogRecordPos) error {
+	record := &LogRecord{Key: key, Value: EncodeLogRecordPos(pos)}
+	encRecord, _ := EncodeLogRecord(record)
+	return d.Write(encRecord)
 }

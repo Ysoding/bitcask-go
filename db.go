@@ -75,7 +75,17 @@ func Open(opts ...DBOption) (*DB, error) {
 
 	db.isInitial = isInitial
 
+	// 加载 merge 数据目录
+	if err := db.loadMergeFiles(); err != nil {
+		return nil, err
+	}
+
 	if err := db.loadDataFiles(); err != nil {
+		return nil, err
+	}
+
+	// 从 hint 索引文件中加载索引
+	if err := db.loadIndexFromHintFile(); err != nil {
 		return nil, err
 	}
 
@@ -84,6 +94,103 @@ func Open(opts ...DBOption) (*DB, error) {
 	}
 
 	return db, nil
+}
+
+func (db *DB) loadIndexFromHintFile() error {
+	// 查看 hint 索引文件是否存在
+	hintFileName := filepath.Join(db.dirPath, data.HintFileName)
+	if _, err := os.Stat(hintFileName); os.IsNotExist(err) {
+		return nil
+	}
+
+	//	打开 hint 索引文件
+	hintFile, err := data.OpenHintFile(db.dirPath)
+	if err != nil {
+		return err
+	}
+
+	offset := int64(0)
+	for {
+		logRecord, size, err := hintFile.ReadLogRecord(offset)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+
+		// 解码拿到实际的位置索引
+		pos := data.DecodeLogRecordPos(logRecord.Value)
+		db.indexer.Put(logRecord.Key, pos)
+		offset += size
+	}
+
+	return nil
+}
+
+func (db *DB) loadMergeFiles() error {
+	mergePath := db.getMergePath()
+	// merge 目录不存在的话直接返回
+	if _, err := os.Stat(mergePath); os.IsNotExist(err) {
+		return nil
+	}
+
+	defer func() {
+		_ = os.RemoveAll(mergePath)
+	}()
+
+	dirEntries, err := os.ReadDir(mergePath)
+	if err != nil {
+		return err
+	}
+
+	// 查找标识 merge 完成的文件，判断 merge 是否处理完了
+	var mergeFinished bool
+	var mergeFileNames []string
+
+	for _, entry := range dirEntries {
+		if entry.Name() == data.MergeFinishedFileName {
+			mergeFinished = true
+		}
+
+		if entry.Name() == data.SeqNoFileName || entry.Name() == fileLockName {
+			continue
+		}
+
+		mergeFileNames = append(mergeFileNames, entry.Name())
+	}
+
+	// 没有 merge 完成则直接返回
+	if !mergeFinished {
+		return nil
+	}
+
+	nonMergeFileId, err := db.getNonMergeFileID(mergePath)
+	if err != nil {
+		return nil
+	}
+
+	// 删除旧的数据文件
+	fileID := uint32(0)
+	for ; fileID < nonMergeFileId; fileID++ {
+		filename := data.GetDataFileName(db.dirPath, fileID)
+		if _, err := os.Stat(filename); err == nil {
+			if err := os.Remove(filename); err != nil {
+				return err
+			}
+		}
+	}
+
+	// 将新的数据文件移动到数据目录中
+	for _, filename := range mergeFileNames {
+		srcPath := filepath.Join(mergePath, filename)
+		destPath := filepath.Join(db.dirPath, filename)
+		if err := os.Rename(srcPath, destPath); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (db *DB) initDirectory() (bool, error) {
@@ -171,6 +278,21 @@ func (db *DB) loadDataFiles() error {
 }
 
 func (db *DB) loadIndexFromDataFiles() error {
+	if len(db.fileIDs) == 0 {
+		return nil
+	}
+
+	// 查看是否发生过 merge
+	hasMerge, nonMergeFileId := false, uint32(0)
+	mergeFinFileName := filepath.Join(db.dirPath, data.MergeFinishedFileName)
+	if _, err := os.Stat(mergeFinFileName); err == nil {
+		fid, err := db.getNonMergeFileID(db.dirPath)
+		if err != nil {
+			return err
+		}
+		hasMerge = true
+		nonMergeFileId = fid
+	}
 
 	updateIndex := func(key []byte, typ data.LogRecordType, pos *data.LogRecordPos) {
 		var oldPos *data.LogRecordPos
@@ -191,6 +313,11 @@ func (db *DB) loadIndexFromDataFiles() error {
 
 	for i, fileID := range db.fileIDs {
 		fileID := uint32(fileID)
+
+		// 如果比最近未参与 merge 的文件 id 更小，则说明已经从 Hint 文件中加载索引了
+		if hasMerge && fileID < nonMergeFileId {
+			continue
+		}
 
 		var dataFile *data.DataFile
 		if fileID == db.activeFile.FileID {

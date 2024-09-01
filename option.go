@@ -12,18 +12,18 @@ type option struct {
 	syncWrite    bool   // 每次写是否持久化
 	bytesPerSync uint32
 	dataFileSize int64 // 存储文件大小
+
+	dataFileMergeRatio float32 //	数据文件合并的阈值
 }
 
 type iteratorOption struct {
-	// 遍历前缀为指定值的 Key，默认为空
-	prefix []byte
-	// 是否反向遍历，默认 false 是正向
-	reverse bool
+	prefix  []byte // 遍历前缀为指定值的 Key，默认为空
+	reverse bool   // 是否反向遍历，默认 false 是正向
 }
 
 type writeBatchOption struct {
 	maxBatchNum int  // 一个批次当中最大的数据量
-	syncWrites  bool //	 提交时是否 sync 持久化
+	syncWrite   bool //	 提交时是否 sync 持久化
 }
 
 type IndexerType = byte
@@ -47,12 +47,12 @@ var DefaultIteratorOption = iteratorOption{
 
 var DefaultWriteBatchOption = writeBatchOption{
 	maxBatchNum: 10_000,
-	syncWrites:  true,
+	syncWrite:   true,
 }
 
 func WithWriteSyncWrites(val bool) WriteBatchOption {
 	return func(opt *writeBatchOption) {
-		opt.syncWrites = val
+		opt.syncWrite = val
 	}
 }
 
@@ -101,5 +101,11 @@ func WithDBSyncWrite(val bool) DBOption {
 func WithDBBytesPerWrite(val uint32) DBOption {
 	return func(opt *option) {
 		opt.bytesPerSync = val
+	}
+}
+
+func WithDBDataFileMergeRatio(val float32) DBOption {
+	return func(opt *option) {
+		opt.dataFileMergeRatio = val
 	}
 }

@@ -117,7 +117,7 @@ func (wb *WriteBatch) Commit() error {
 	}
 
 	// 根据配置决定是否持久化
-	if wb.syncWrites && wb.db.activeFile != nil {
+	if wb.syncWrite && wb.db.activeFile != nil {
 		if err := wb.db.activeFile.Sync(); err != nil {
 			return err
 		}
