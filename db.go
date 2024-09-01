@@ -39,6 +39,14 @@ type DB struct {
 	seqNoFileExists bool // 存储事务序列号的文件是否存在
 }
 
+// Stat 存储引擎统计信息
+type Stat struct {
+	KeyNum          uint  // key 的总数量
+	DataFileNum     uint  // 数据文件的数量
+	ReclaimableSize int64 // 可以进行 merge 回收的数据量，字节为单位
+	DiskSize        int64 // 数据目录所占磁盘空间大小
+}
+
 func Open(opts ...DBOption) (*DB, error) {
 	db := &DB{
 		option:   DefaultOption,
@@ -118,6 +126,28 @@ func Open(opts ...DBOption) (*DB, error) {
 	}
 
 	return db, nil
+}
+
+func (db *DB) Stat() *Stat {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	var dataFiles = uint(len(db.oldFiles))
+	if db.activeFile != nil {
+		dataFiles += 1
+	}
+
+	dirSize, err := utils.DirSize(db.dirPath)
+	if err != nil {
+		panic(fmt.Sprintf("failed to get dir size : %v", err))
+	}
+
+	return &Stat{
+		KeyNum:          uint(db.indexer.Size()),
+		DataFileNum:     dataFiles,
+		ReclaimableSize: db.reclaimSize,
+		DiskSize:        dirSize,
+	}
 }
 
 // 将数据文件的 IO 类型设置为标准文件 IO
